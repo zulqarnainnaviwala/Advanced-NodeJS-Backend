@@ -4,7 +4,7 @@ class ApiError extends Error {
     statusCode,
     message = "Something went wrong", //default if no message was passed
     errors = [],
-    statck = ""
+    stack = ""
   ) {
     super(message);
     this.statusCode = statusCode;
@@ -13,8 +13,8 @@ class ApiError extends Error {
     this.success = false;
     this.errors = errors;
     //if error is exists in Error, assign that as well
-    if (statck) {
-      this.stack = statck;
+    if (stack) {
+      this.stack = stack;
     } else {
       // https://nodejs.org/api/errors.html#errorcapturestacktracetargetobject-constructoropt
       Error.captureStackTrace(this, this.constructor);

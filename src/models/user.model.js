@@ -52,6 +52,7 @@ const userSchema = new Schema(
   }
 );
 
+//explore other middlewares: https://mongoosejs.com/docs/middleware.html
 //using built-in middleware to encrypt pass before saving into the database
 userSchema.pre("save", async function (next) {
   //check : only run when there is any change/modification made in password field
@@ -61,6 +62,7 @@ userSchema.pre("save", async function (next) {
   next();
 });
 
+// explore other prototypes: https://mongoosejs.com/docs/api/schema.html
 //custom methods to check if password is correct after decryption and inject by "schemaName.methods.methodName = .."
 userSchema.methods.isPasswordCorrect = async function (password) {
   return await bcrypt.compare(password, this.password); //returns boolean

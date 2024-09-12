@@ -19,10 +19,16 @@ const registerUser = asyncHandler(async (req, res) => {
     // check for successful user creation 
     // return response
     const { fullName, email, username, password } = req.body
-
     if (
-        [fullName, email, username, password].some((field) => field?.trim() === "")
+        [fullName, email, username, password].some(field => field?.trim() === "" || !field)
     ) {
+        // Behavior of "!field"
+        // undefined: !undefined evaluates to true.
+        // null: !null evaluates to true.
+        // "" (empty string): !"" evaluates to true.
+        // 0: !0 evaluates to true.
+        // false: !false evaluates to true.
+        // NaN: !NaN evaluates to true.
         throw new ApiError(400, "All fields are required")
     }
 
@@ -35,8 +41,12 @@ const registerUser = asyncHandler(async (req, res) => {
     }
 
     //multer gives us files access in "req.files"
-    const avatarLocalPath = req.files?.avatar[0]?.path;
-    // const coverImageLocalPath = req.files?.coverImage[0]?.path; //returns undefined if cover is not uploaded, so we will follow classic check for this below
+    // const avatarLocalPath = req.files?.avatar[0]?.path; //return undefined if user forgot to upload avatar, so we will follow classic check (this a required field)
+    let avatarLocalPath;
+    if (req.files && Array.isArray(req.files.avatar) && req.files.avatar.length > 0) {
+        avatarLocalPath = req.files.avatar[0].path
+    }
+    // const coverImageLocalPath = req.files?.coverImage[0]?.path; //returns undefined if there is no cover, so we will follow classic check (this a not required field in our case but should be handled properly)
     let coverImageLocalPath;
     if (req.files && Array.isArray(req.files.coverImage) && req.files.coverImage.length > 0) {
         coverImageLocalPath = req.files.coverImage[0].path

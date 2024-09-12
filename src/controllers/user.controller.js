@@ -113,9 +113,7 @@ const loginUser = asyncHandler(async (req, res) => {
     // password validation check
     // generate access and referesh token
     // send tokens in cookie or response(if mobile app)
-    console.log(req.body)
     const { email, username, password } = req.body;
-    console.log(email, username, password)
     if (!(username || email)) {
         throw new ApiError(400, "username or email is required")
     }
@@ -156,7 +154,37 @@ const loginUser = asyncHandler(async (req, res) => {
         )
 })
 
+const logoutUser = asyncHandler(async (req, res) => {
+    // To log out a user, either clear the refreshToken or delete it from the database using the user's _id, which is accessible through the custom authentication middleware.
+    await User.findByIdAndUpdate(
+        req.user._id,
+        {
+            // Use $set to update or create a field with a specific value.
+            // $set: {
+            //In MongoDB, when you use undefined for a field in an update operation, it doesn’t actually remove the field from the document. Instead, it leaves the field as is.
+            //     refreshToken: undefined
+            // }
+            // $set: {
+            //     refreshToken: ""
+            // }
+            $unset: {
+                refreshToken: ""
+            }
+        },
+        {
+            new: true
+        }
+    )
+
+    return res
+        .status(200)
+        .clearCookie("accessToken", cookieOptions)
+        .clearCookie("refreshToken", cookieOptions)
+        .json(new ApiResponse(200, {}, "User logged Out"))
+})
+
 export {
     registerUser,
-    loginUser
+    loginUser,
+    logoutUser
 }

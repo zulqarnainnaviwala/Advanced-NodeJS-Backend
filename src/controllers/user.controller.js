@@ -4,6 +4,26 @@ import { User } from "../models/user.model.js"
 import { uploadOnCloudinary } from "../utils/cloudinary.js"
 import { ApiResponse } from "../utils/ApiResponse.js";
 
+const generateAccessAndRefereshTokens = async (userId) => {
+    try {
+        const user = await User.findById(userId)
+        const accessToken = user.generateAccessToken()
+        const refreshToken = user.generateRefreshToken()
+        user.refreshToken = refreshToken
+        await user.save({ validateBeforeSave: false })
+        return { accessToken, refreshToken }
+    } catch (error) {
+        throw new ApiError(500, "Something went wrong while generating referesh and access token")
+    }
+}
+
+//setting these cookie options thoughtfully, you can significantly enhance the security of your web application and protect against a range of common web vulnerabilities.
+// httpOnly flag, help ensure that cookies are protected from being accessed or modified by client-side JavaScript. 
+const cookieOptions = {
+    httpOnly: true,
+    secure: true
+}
+
 const registerUser = asyncHandler(async (req, res) => {
     // res.status(500).json({
     //     message: "Zulqarnain Naviwala"
@@ -86,6 +106,57 @@ const registerUser = asyncHandler(async (req, res) => {
     )
 })
 
+const loginUser = asyncHandler(async (req, res) => {
+    // get data request body
+    // username or email for login 
+    // find the user if exits
+    // password validation check
+    // generate access and referesh token
+    // send tokens in cookie or response(if mobile app)
+    console.log(req.body)
+    const { email, username, password } = req.body;
+    console.log(email, username, password)
+    if (!(username || email)) {
+        throw new ApiError(400, "username or email is required")
+    }
+
+    const user = await User.findOne({
+        $or: [{ username }, { email }]
+    })
+
+    if (!user) {
+        throw new ApiError(404, "User does not exist")
+    }
+
+    // Use the custom method 'isPasswordCorrect' to validate the password
+    // Note: 'user' refers to an instance of the User model (not the model itself)
+    // 'User' is the Mongoose model, while 'user' is an instance of that model
+    const isPasswordValid = await user.isPasswordCorrect(password)
+
+    if (!isPasswordValid) {
+        throw new ApiError(401, "Invalid user credentials")
+    }
+
+    const { accessToken, refreshToken } = await generateAccessAndRefereshTokens(user._id)
+
+    const loggedInUser = await User.findById(user._id).select("-password -refreshToken")
+
+    return res
+        .status(200)
+        .cookie("accessToken", accessToken, cookieOptions)
+        .cookie("refreshToken", refreshToken, cookieOptions)
+        .json(
+            new ApiResponse(
+                200,
+                {
+                    user: loggedInUser, accessToken, refreshToken
+                },
+                "User logged In Successfully"
+            )
+        )
+})
+
 export {
     registerUser,
+    loginUser
 }

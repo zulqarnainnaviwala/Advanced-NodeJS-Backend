@@ -8,7 +8,7 @@ const userSchema = new Schema(
       type: String,
       required: [true, "username is required"],
       unique: true,
-      lowecase: true,
+      lowercase: true,
       trim: true,
       //Setting index: true in Mongoose creates an index on the field, speeding up search performance and optimizes query operations involving that field.
       index: true,
@@ -17,7 +17,7 @@ const userSchema = new Schema(
       type: String,
       required: [true, "email is required"],
       unique: true,
-      lowecase: true,
+      lowercase: true,
       trim: true,
     },
     fullName: {
@@ -64,6 +64,7 @@ userSchema.pre("save", async function (next) {
 
 // explore other prototypes: https://mongoosejs.com/docs/api/schema.html
 //custom methods to check if password is correct after decryption and inject by "schemaName.methods.methodName = .."
+// Custom method to check if the provided password matches the user's hashed password
 userSchema.methods.isPasswordCorrect = async function (password) {
   return await bcrypt.compare(password, this.password); //returns boolean
 };

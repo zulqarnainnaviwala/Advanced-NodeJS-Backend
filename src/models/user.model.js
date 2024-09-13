@@ -57,7 +57,7 @@ const userSchema = new Schema(
 userSchema.pre("save", async function (next) {
   //check : only run when there is any change/modification made in password field
   if (!this.isModified("password")) return next();
-  //if password created/modified
+  //if password created/modified - now this line below will run in our "changeCurrentPassword" case
   this.password = await bcrypt.hash(this.password, 10);
   next();
 });

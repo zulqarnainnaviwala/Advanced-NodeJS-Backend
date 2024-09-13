@@ -207,24 +207,53 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
 
         const { accessToken: newAccessToken, refreshToken: newRefreshToken } = await generateAccessAndRefereshTokens(user._id)
         return res
-        .status(200)
-        .cookie("accessToken", newAccessToken, cookieOptions)
-        .cookie("refreshToken", newRefreshToken, cookieOptions)
-        .json(
-            new ApiResponse(
-                200, 
-                {accessToken:newAccessToken, refreshToken: newRefreshToken},
-                "Access token refreshed"
+            .status(200)
+            .cookie("accessToken", newAccessToken, cookieOptions)
+            .cookie("refreshToken", newRefreshToken, cookieOptions)
+            .json(
+                new ApiResponse(
+                    200,
+                    { accessToken: newAccessToken, refreshToken: newRefreshToken },
+                    "Access token refreshed"
+                )
             )
-        )
     } catch (error) {
         throw new ApiError(401, error?.message || "Invalid refresh token")
     }
+})
+
+const changeCurrentPassword = asyncHandler(async (req, res) => {
+    // Retrieve  oldPassword and newPassword.
+    // Find the user from the database by "_id" from auth middleware.
+    // Check if oldPassword is correct.
+    // If oldPassword is correct, update the user's password to newPassword.
+    // Save the updated user in database.
+    const { oldPassword, newPassword } = req.body
+    if (oldPassword === newPassword) {
+        throw new ApiError(422, "New password must be different from the current password.")
+    }
+
+    const user = await User.findById(req.user?._id).select("-refreshToken")
+    const isPasswordCorrect = await user.isPasswordCorrect(oldPassword)
+
+    if (!isPasswordCorrect) {
+        throw new ApiError(400, "Invalid old password")
+    }
+
+    user.password = newPassword
+    // The password will be hashed automatically as we wrote the function using Pre-Hook "save"
+    // and "validateBeforeSave: false" : saves the user instance to the database without running the usual schema validation checks.
+    await user.save({ validateBeforeSave: false })
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, {}, "Password changed successfully"))
 })
 
 export {
     registerUser,
     loginUser,
     logoutUser,
-    refreshAccessToken
+    refreshAccessToken,
+    changeCurrentPassword
 }

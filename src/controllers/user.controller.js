@@ -325,6 +325,20 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
         )
 })
 
+const getCurrentUser = asyncHandler(async(req, res) => {
+    const user = req.user;
+    if(!user){
+        throw new ApiError(400, "User not found")
+    }
+
+    return res
+    .status(200)
+    .json(new ApiResponse(
+        200,
+        user,
+        "User fetched successfully"
+    ))
+})
 
 export {
     registerUser,
@@ -334,5 +348,6 @@ export {
     changeCurrentPassword,
     updateAccountDetails,
     updateUserAvatar,
-    updateUserCoverImage
+    updateUserCoverImage,
+    getCurrentUser
 }

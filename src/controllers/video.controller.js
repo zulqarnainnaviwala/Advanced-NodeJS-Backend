@@ -62,8 +62,108 @@ const publishAVideo = asyncHandler(async (req, res) => {
 })
 
 const getAllVideos = asyncHandler(async (req, res) => {
-    const { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query
-    //TODO: get all videos based on query, sort, pagination
+    let { page = 1, limit = 10, userId, query, sortBy = "createdAt", sortType = "asc", } = req.query
+
+    if (!userId || !userId.trim()) {
+        throw new ApiError(400, "User ID is required in the query parameters.");
+    }
+    if (!isValidObjectId(userId.trim())) {
+        throw new ApiError(400, "Invalid User ID format.");
+    }
+
+    page = Math.max(1, parseInt(page, 10) || 1);
+    limit = Math.min(Math.max(1, parseInt(limit, 10) || 10), 50);
+
+    const pipeline = [];
+    userId = new mongoose.Types.ObjectId(userId.trim());
+    if (userId) {
+        pipeline.push({
+            $match: {
+                $expr: {
+                    $and: [
+                        { $eq: ["$owner", userId] },
+                        {
+                            $or: [
+                                { $eq: [userId, req.user._id] },
+                                { $eq: ["$isPublished", true] }
+                            ]
+                        }
+                    ]
+                }
+            }
+        },
+        )
+    }
+    if (query) {
+        pipeline.push(
+            {
+                $match: {
+                    $or: [
+                        { title: { $regex: query, $options: 'i' } },
+                        { description: { $regex: query, $options: 'i' } }
+                    ]
+                },
+
+            },
+        )
+    }
+    if (sortBy && sortType) {
+        const sortOrder = sortType === "asc" ? 1 : -1;
+        pipeline.push(
+            { $sort: { [sortBy]: sortOrder } }
+        )
+    }
+    if (page && limit) {
+        pipeline.push(
+
+            {
+                $lookup: {
+                    from: "users",
+                    localField: "owner",
+                    foreignField: "_id",
+                    as: "owner",
+                    pipeline: [
+                        {
+                            $project: {
+                                _id: 0,
+                                username: 1,
+                                fullName: 1,
+                                avatar: 1,
+                            }
+                        },
+
+                    ],
+                },
+            },
+            {
+                $unwind: {
+                    'path': '$owner',
+                    'preserveNullAndEmptyArrays': false,
+                },
+            }
+        )
+    }
+
+    if (!pipeline.length) {
+        throw new ApiError(400, "something went wrong while while fetching videos")
+    }
+    try {
+        const result = await Video.aggregatePaginate(pipeline, { page, limit });
+        return res
+            .status(200)
+            .json(
+                new ApiResponse(200, {
+                    success: true,
+                    page: result.page,
+                    limit: result.limit,
+                    totalPages: result.totalPages,
+                    totalResults: result.totalDocs,
+                    videos: result.docs,
+                }, "videos fetched successfully")
+            )
+    } catch (error) {
+        throw new ApiError(500, error?.message || "Something went wrong while fetching videos");
+    }
 })
 
 const getVideoById = asyncHandler(async (req, res) => {

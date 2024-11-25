@@ -35,7 +35,18 @@ const destroyOnCloudinary = async (remotePath) => {
         if (!remotePath) return null
 
         const publicId = remotePath.split('/').pop().split('.')[0];
-        await cloudinary.uploader.destroy(publicId).then(result => console.log(result));
+
+        // Determine the resource type based on the URL
+        let resourceType
+        if (remotePath.includes('/video/')) {
+            resourceType = "video"
+        }
+        else if (remotePath.includes('/image/')) {
+            resourceType = "image"
+        } else {
+            throw new Error('Unsupported resource type');
+        }
+        await cloudinary.uploader.destroy(publicId, { resource_type: resourceType }).then(result => console.log(result));
     } catch (error) {
         console.log("Error when deleting on cloudinary :", error)
         return null;

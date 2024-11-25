@@ -320,8 +320,66 @@ const getVideoById = asyncHandler(async (req, res) => {
 
 const updateVideo = asyncHandler(async (req, res) => {
     const { videoId } = req.params
-    //TODO: update video details like title, description, thumbnail
+    const { title, description } = req.body
+    const thumbnailLocalPath = req.file?.path
+    if (!videoId.trim()) {
+        throw new ApiError(400, "video id is required")
+    }
+    if (!isValidObjectId(videoId.trim())) {
+        throw new ApiError(400, "invalid video id")
+    }
 
+    // Find the video by ID and check ownership
+    const video = await Video.findOne({ _id: videoId.trim(), owner: req.user._id });
+    if (!video) {
+        // Video not found or not owned by the user
+        throw new ApiError(404, "Video Not Found or Unauthaurized to Update Details");
+    }
+
+    if (
+        [title, description, thumbnailLocalPath].every(field => !field || field.trim() === "")
+    ) {
+        throw new ApiError(400, "At least one of title, description, or thumbnail is required to update");
+    }
+
+    if (title && (title !== video.title)) {
+        video.title = title;
+    }
+    if (description && (description !== video.description)) {
+        video.description = description;
+    }
+
+    let thumbnail;
+    // upload new thumbnail
+    if (thumbnailLocalPath) {
+        console.log(true);
+        thumbnail = await uploadOnCloudinary(thumbnailLocalPath);
+    }
+    // if new upload fails
+    if (!thumbnail) {
+        throw new ApiError(400, "Thumbnail cloudinary file is required");
+    }
+    // destroy old thumbnail
+    if (thumbnail?.url) {
+        await destroyOnCloudinary(video.thumbnail);
+    }
+
+    try {
+        if (title && (title !== video.title)) {
+            video.title = title;
+        }
+        if (thumbnail.url && (thumbnail.url !== video.thumbnail)) {
+            video.thumbnail = thumbnail.url;
+        }
+
+        const updated = await video.save();
+        if (!updated) {
+            throw new ApiError(400, "Error while updating video details");
+        }
+        return res.status(200).json(new ApiResponse(200, updated, "video info updated succesfully"));
+    } catch (error) {
+        throw new ApiError(400, error?.message || "something went wrong while publishing video")
+    }
 })
 
 const deleteVideo = asyncHandler(async (req, res) => {

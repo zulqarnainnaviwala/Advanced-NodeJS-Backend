@@ -176,8 +176,146 @@ const getAllVideos = asyncHandler(async (req, res) => {
 })
 
 const getVideoById = asyncHandler(async (req, res) => {
-    const { videoId } = req.params
-    //TODO: get video by id
+    const videoId = req.params.videoId?.trim();
+    if (!videoId.trim()) {
+        throw new ApiError(400, "Video ID is required");
+    }
+    if (!isValidObjectId(videoId.trim())) {
+        throw new ApiError(400, "Invalid video ID");
+    }
+
+    try {
+        // const video = await Video.findOne({ _id: videoId.trim(), $or: [{ owner: req.user._id }, { isPublished: true }] })
+        //     .populate({
+        //         path: 'owner',
+        //         select: '-_id fullName avatar username' // Select fields from the owner (User model)
+        //     });
+        const video = await Video.aggregate([
+            // Match the video based on its ID, and check if it is either owned by the user or published
+            {
+                $match: {
+                    _id: new mongoose.Types.ObjectId(videoId),
+                    $or: [
+                        { owner: req.user?._id },
+                        { isPublished: true }
+                    ]
+                }
+            },
+            // Populate the 'owner' information
+            {
+                $lookup: {
+                    from: 'users',
+                    localField: 'owner',
+                    foreignField: '_id',
+                    as: 'owner',
+                    pipeline: [
+                        {
+                            $lookup: {
+                                from: "subscriptions",
+                                localField: "_id",
+                                foreignField: "channel",
+                                as: "subscribers"
+                            }
+                        },
+                        {
+                            $addFields: {
+                                isSubscribed: {
+                                    $cond: {
+                                        if: { $in: [req.user?._id, "$subscribers.subscriber"] },
+                                        then: true,
+                                        else: false
+                                    }
+                                },
+                                subscribersCount: {
+                                    $size: "$subscribers"
+                                },
+                            }
+                        },
+                        {
+                            $project: {
+                                _id: 0,
+                                fullName: 1,
+                                username: 1,
+                                subscribersCount: 1,
+                                isSubscribed: 1,
+                                avatar: 1,
+                            }
+                        },
+                    ]
+                }
+            },
+            {
+                $unwind: '$owner' // Unwind the array to make it an object, as `owner` will be an array after $lookup
+            },
+            // // Add fields for like and dislike counts
+            {
+                $lookup: {
+                    from: 'likes', // Assuming the 'Like' collection is named 'likes'
+                    localField: '_id', // Match video _id from Video collection
+                    foreignField: 'video', // Match video field in Like collection
+                    as: 'likes' // Add result to a new 'likes' field
+                }
+            },
+            {
+                $lookup: {
+                    from: 'dislikes', // Assuming the 'Dislike' collection is named 'dislikes'
+                    localField: '_id', // Match video _id from Video collection
+                    foreignField: 'video', // Match video field in Dislike collection
+                    as: 'dislikes' // Add result to a new 'dislikes' field
+                }
+            },
+            {
+                $addFields: {
+                    isLiked: {
+                        $cond: {
+                            if: { $in: [req.user?._id, "$likes.likedBy"] },
+                            then: true,
+                            else: false
+                        }
+                    },
+                    likesCount: { $size: '$likes' }, // Count the number of likes (length of the 'likes' array)
+                    isDisliked: {
+                        $cond: {
+                            if: { $in: [req.user?._id, "$dislikes.dislikedBy"] },
+                            then: true,
+                            else: false
+                        }
+                    },
+                    dislikesCount: { $size: '$dislikes' }, // Count the number of dislikes (length of the 'dislikes' array)
+                }
+            },
+            {
+                $project: {
+                    _id: 1,
+                    videoFile: 1,
+                    thumbnail: 1,
+                    title: 1,
+                    description: 1,
+                    duration: 1,
+                    views: 1,
+                    isPublished: 1,
+                    owner: 1,
+                    createdAt: 1,
+                    likesCount: 1,
+                    isLiked: 1,
+                    dislikesCount: 1,
+                    isDisliked: 1,
+                }
+            },
+        ]);
+
+        if (!video.length) {
+            throw new ApiError(404, "Video not found or not available right now");
+        }
+
+        return res
+            .status(200)
+            .json(
+                new ApiResponse(200, video[0], "video fetched successfully")
+            )
+    } catch (error) {
+        throw new ApiError(500, error?.message || "An unexpected error occurred while fetching the video");
+    }
 })
 
 const updateVideo = asyncHandler(async (req, res) => {

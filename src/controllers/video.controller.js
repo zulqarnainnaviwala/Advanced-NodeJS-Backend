@@ -61,6 +61,7 @@ const publishAVideo = asyncHandler(async (req, res) => {
     }
 })
 
+// getAllVideos Optmised/Refactored Version
 const getAllVideos = asyncHandler(async (req, res) => {
     let { page = 1, limit = 10, userId, query, sortBy = "createdAt", sortType = "asc", } = req.query
 
@@ -71,42 +72,46 @@ const getAllVideos = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Invalid User ID format.");
     }
 
-    page = Math.max(1, parseInt(page, 10) || 1);
-    limit = Math.min(Math.max(1, parseInt(limit, 10) || 10), 50);
+    // This way, page will default to 1 (if parseInt returns NaN), 
+    // limit will default to 10 (if parseInt returns NaN), 
+    // and any value above limit 50 will be limited to 50.
+    page = Math.max(1, parseInt(page, 10) || 1); // Ensures page is at least 1
+    limit = Math.min(Math.max(1, parseInt(limit, 10) || 10), 50); // Ensures limit is between 1 and 50
 
     const pipeline = [];
     userId = new mongoose.Types.ObjectId(userId.trim());
-    if (userId) {
-        pipeline.push({
-            $match: {
-                $expr: {
-                    $and: [
-                        { $eq: ["$owner", userId] },
-                        {
-                            $or: [
-                                { $eq: [userId, req.user._id] },
-                                { $eq: ["$isPublished", true] }
-                            ]
-                        }
-                    ]
-                }
-            }
-        },
-        )
-    }
-    if (query) {
-        pipeline.push(
-            {
-                $match: {
-                    $or: [
-                        { title: { $regex: query, $options: 'i' } },
-                        { description: { $regex: query, $options: 'i' } }
-                    ]
-                },
 
-            },
-        )
+    const matchConditions = [
+        { $eq: ["$owner", userId] },
+        { $or: [{ $eq: [userId, req.user._id] }, { $eq: ["$isPublished", true] }] }
+    ];
+
+    if (query) {
+        // Try Below with query = "      abc  yourSearchingWord  etc     unique"
+        // const search = query.trim().split(" ").filter(term => term !== "");
+        // if (search.length > 0) {
+        //     // Create regex queries for each search term
+        //     const regexQueries = search.map(term => ({
+        //         $or: [
+        //             { title: { $regex: term, $options: 'i' } },
+        //             { description: { $regex: term, $options: 'i' } }
+        //         ]
+        //     }));
+
+        //     // Push the regex queries into the match conditions using $and
+        //     matchConditions.push({ $or: regexQueries });
+        // }
+
+        matchConditions.push({
+            $or: [
+                { title: { $regex: query, $options: 'i' } },
+                { description: { $regex: query, $options: 'i' } }
+            ]
+        });
     }
+
+    pipeline.push({ $match: { $expr: { $and: matchConditions } } });
+
     if (sortBy && sortType) {
         const sortOrder = sortType === "asc" ? 1 : -1;
         pipeline.push(
@@ -115,6 +120,11 @@ const getAllVideos = asyncHandler(async (req, res) => {
     }
     if (page && limit) {
         pipeline.push(
+            // Remove the skip and limit from the pipeline
+            // aggregatePaginate will handle these internally
+
+            // { $skip: (page - 1) * limit },
+            // { $limit: limit },
 
             {
                 $lookup: {
@@ -145,24 +155,23 @@ const getAllVideos = asyncHandler(async (req, res) => {
     }
 
     if (!pipeline.length) {
-        throw new ApiError(400, "something went wrong while while fetching videos")
+        throw new ApiError(400, "Error occurred while preparing the aggregation pipeline.");
     }
+
     try {
         const result = await Video.aggregatePaginate(pipeline, { page, limit });
-        return res
-            .status(200)
-            .json(
-                new ApiResponse(200, {
-                    success: true,
-                    page: result.page,
-                    limit: result.limit,
-                    totalPages: result.totalPages,
-                    totalResults: result.totalDocs,
-                    videos: result.docs,
-                }, "videos fetched successfully")
-            )
+        return res.status(200).json(
+            new ApiResponse(200, {
+                success: true,
+                page: result.page,
+                limit: result.limit,
+                totalPages: result.totalPages,
+                totalResults: result.totalDocs,
+                videos: result.docs
+            }, "Videos fetched successfully")
+        );
     } catch (error) {
-        throw new ApiError(500, error?.message || "Something went wrong while fetching videos");
+        throw new ApiError(500, error?.message || "Error occurred while executing the aggregation pipeline.");
     }
 })
 

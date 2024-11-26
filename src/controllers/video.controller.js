@@ -435,7 +435,46 @@ const deleteVideo = asyncHandler(async (req, res) => {
 })
 
 const togglePublishStatus = asyncHandler(async (req, res) => {
-    const { videoId } = req.params
+    const videoId = req.params.videoId?.trim();
+    // Validate video ID
+    if (!videoId) {
+        throw new ApiError(400, "Video ID is required.");
+    }
+    if (!isValidObjectId(videoId)) {
+        throw new ApiError(400, "Invalid video ID.");
+    }
+    try {
+        // Find the video and verify ownership
+        const video = await Video.findOne({ _id: videoId, owner: req.user?._id });
+        if (!video) {
+            throw new ApiError(404, "Video not found or unauthorized.");
+        }
+
+        // Toggle the publish status
+        const updatedVideo = await Video.findByIdAndUpdate(
+            videoId,
+            { $set: { isPublished: !video.isPublished } },
+            { new: true }
+        ).populate({
+            path: 'owner',
+            select: '-_id fullName avatar username' // Select owner fields
+        });
+
+        if (!updatedVideo) {
+            throw new ApiError(500, "Failed to update video status.");
+        }
+
+        return res
+            .status(200)
+            .json(
+                new ApiResponse(200, {
+                    videoId: updatedVideo._id,
+                    isPublished: updatedVideo.isPublished
+                }, `Video publish status updated successfully to ${updatedVideo.isPublished ? "Published" : "Unpublished"}.`
+                ));
+    } catch (error) {
+        throw new ApiError(500, error?.message || "An unexpected error occurred while updating the video status.");
+    }
 })
 
 export {

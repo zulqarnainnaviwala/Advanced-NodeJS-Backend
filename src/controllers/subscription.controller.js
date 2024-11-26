@@ -146,7 +146,101 @@ const getUserChannelSubscribers = asyncHandler(async (req, res) => {
 
 // controller to return channel list to which user has subscribed
 const getSubscribedChannels = asyncHandler(async (req, res) => {
-    const { subscriberId } = req.params
+
+    const channelId = req.params.channelId?.trim();
+    if (!channelId) {
+        throw new ApiError(400, "channel id is required")
+    }
+    if (!isValidObjectId(channelId)) {
+        throw new ApiError(400, "invalid channel id")
+    }
+
+    try {
+        const subscribersList = await Subscription.aggregate([
+            {
+                $match: {
+                    subscriber: new mongoose.Types.ObjectId(channelId)
+                },
+            },
+            {
+                $group: {
+                    _id: "$subscriber",
+                    channels: { $push: "$channel" },
+                },
+            },
+            {
+                $lookup: {
+                    from: "users",
+                    localField: "channels",
+                    foreignField: "_id",
+                    as: "channels",
+                    pipeline: [
+                        {
+                            $lookup: {
+                                from: "subscriptions",
+                                localField: "_id",
+                                foreignField: "channel",
+                                as: "subscribers",
+                            },
+                        },
+                        {
+                            $addFields: {
+                                subscribersCount: {
+                                    $size: "$subscribers",
+                                },
+
+                                isSubscribed: {
+                                    $cond: {
+                                        if: {
+                                            $in: [
+                                                req.user?._id,
+                                                "$subscribers.subscriber",
+                                            ],
+                                        },
+                                        then: true,
+                                        else: false,
+                                    },
+                                },
+                            },
+                        },
+                        {
+                            $project: {
+                                _id: 0,
+                                username: 1,
+                                fullName: 1,
+                                avatar: 1,
+                                subscribersCount: 1,
+                                isSubscribed: 1,
+                            },
+                        },
+                    ],
+                },
+            },
+            {
+                $project: {
+                    _id: 0,
+                    channels: 1,
+                },
+            },
+        ]);
+
+        if (!subscribersList || subscribersList.length === 0) {
+            return res
+                .status(200)
+                .json(
+                    new ApiResponse(200, [], "Channel has no subscribers")
+                );
+        }
+
+        return res
+            .status(200)
+            .json(
+                new ApiResponse(200, subscribersList[0].channels, "Subscribed channels list fetched successfully")
+            );
+
+    } catch (error) {
+        throw new ApiError(500, error?.message || "An error occurred while fetching subscribed channels");
+    }
 })
 
 export {

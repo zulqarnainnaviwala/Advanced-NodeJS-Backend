@@ -391,8 +391,47 @@ const updateVideo = asyncHandler(async (req, res) => {
 });
 
 const deleteVideo = asyncHandler(async (req, res) => {
-    const { videoId } = req.params
-    //TODO: delete video
+    const videoId = req.params.videoId?.trim();
+    if (!videoId) {
+        throw new ApiError(400, "Video ID is required");
+    }
+    if (!isValidObjectId(videoId)) {
+        throw new ApiError(400, "Invalid video ID");
+    }
+
+    try {
+        // Find the video by ID and check ownership
+        const video = await Video.findOne({ _id: videoId, owner: req.user._id });
+        if (!video) {
+            throw new ApiError(404, "Video not found or unauthorized to delete this video");
+        }
+
+        // Ensure assets are deleted on Cloudinary
+        if (video.thumbnail) {
+            const thumbnailDeleted = await destroyOnCloudinary(video.thumbnail);
+            if (!thumbnailDeleted) {
+                throw new ApiError(500, "Failed to delete video thumbnail from Cloudinary");
+            }
+        }
+
+        if (video.videoFile) {
+            const videoFileDeleted = await destroyOnCloudinary(video.videoFile);
+            if (!videoFileDeleted) {
+                throw new ApiError(500, "Failed to delete video file from Cloudinary");
+            }
+        }
+
+        // Proceed to delete the video
+        const deletedVideo = await Video.findByIdAndDelete(videoId);
+        if (!deletedVideo) {
+            throw new ApiError(500, "Failed to delete video record");
+        }
+        return res
+            .status(200)
+            .json(new ApiResponse(200, response, "Video deleted successfully"));
+    } catch (error) {
+        throw new ApiError(500, error?.message || "An unexpected error occurred while deleting the video");
+    }
 })
 
 const togglePublishStatus = asyncHandler(async (req, res) => {

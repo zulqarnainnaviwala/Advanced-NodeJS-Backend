@@ -11,9 +11,12 @@ const commentSchema = new Schema(
         video: {
             type: Schema.Types.ObjectId,
             ref: "Video",
-            required: [true, 'Video reference is required'], // Ensure a video reference is provided
         },
-        owner: {
+        tweet: {
+            type: Schema.Types.ObjectId,
+            ref: "Tweet",
+        },
+        commentedBy: {
             type: Schema.Types.ObjectId,
             ref: "User",
             required: [true, 'Owner reference is required'], // Ensure an owner reference is provided
@@ -31,6 +34,5 @@ const commentSchema = new Schema(
     }
 );
 
-commentSchema.plugin(mongooseAggregatePaginate)
-
-export const Comment = mongoose.model("Comment", commentSchema)
+commentSchema.plugin(mongooseAggregatePaginate);
+export const Comment = mongoose.model("Comment", commentSchema);

@@ -56,10 +56,17 @@ const userSchema = new Schema(
 //using built-in middleware to encrypt pass before saving into the database
 userSchema.pre("save", async function (next) {
   //check : only run when there is any change/modification made in password field
+  //If password is not modified, skip hashing
   if (!this.isModified("password")) return next();
   //if password created/modified - now this line below will run in our "changeCurrentPassword" case
-  this.password = await bcrypt.hash(this.password, 10);
-  next();
+  try {
+    // Hash the password with bcrypt
+    this.password = await bcrypt.hash(this.password, 10);
+    next(); // Proceed to save the document
+  } catch (error) {
+    // Pass the error to the next middleware (or express error handler)
+    next(error);
+  }
 });
 
 // explore other prototypes: https://mongoosejs.com/docs/api/schema.html

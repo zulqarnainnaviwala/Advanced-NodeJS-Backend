@@ -101,6 +101,49 @@ const toggleVideoLike = asyncHandler(async (req, res) => {
 
 // Toggle like for a comment
 const toggleCommentLike = asyncHandler(async (req, res) => {
+  const { commentId } = req.params;
+  const userId = req.user.id;
+
+  if (!userId) {
+    throw new ApiError(400, "user id is required")
+  }
+  if (!isValidObjectId(userId)) {
+    throw new ApiError(400, "invalid user id")
+  }
+  if (!commentId || !commentId.trim()) {
+    throw new ApiError(400, "comment id is required")
+  }
+  if (!isValidObjectId(commentId)) {
+    throw new ApiError(400, "invalid comment id")
+  }
+
+  // 1. Validate content existence (can be handled outside)
+  const comment = await Comment.findById(commentId)
+  if (!comment) {
+    throw new ApiError(404, `Comment not found.`);
+  }
+
+  // Start a session to ensure atomicity
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+
+  try {
+    const { like, dislike = false } = await toggleLike("comment", commentId, userId, session);
+
+    await session.commitTransaction();  // Commit the transaction after the like toggle
+
+    return res.status(200).json(
+      new ApiResponse(200, { like, dislike }, like ? "comment liked." : "comment unliked.")
+    );
+  } catch (error) {
+    // If an error occurs, abort the transaction
+    await session.abortTransaction();
+    throw new ApiError(error.statusCode ? error.statusCode : 500, error.message ? error.message : "Something went wrong while toggling comment like.");
+  } finally {
+    // End the session whether it's committed or aborted
+    session.endSession();
+  }
 });
 
 // Toggle like for a tweet

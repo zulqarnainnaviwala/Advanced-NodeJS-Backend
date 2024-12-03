@@ -227,4 +227,91 @@ const getLikedVideos = asyncHandler(async (req, res) => {
   }
 });
 
+
+// getLikedVideos With Aggregation Pipeline
+// const getLikedVideos = asyncHandler(async (req, res) => {
+//   let userId = req.user._id
+
+//   if (!userId) {
+//     throw new ApiError(400, "user id is required")
+//   }
+//   if (!isValidObjectId(userId)) {
+//     throw new ApiError(400, "invalid user id")
+//   }
+
+//   try {
+//     const likedVideos = await Like.aggregate([
+//       // Match documents where likedBy is the userId and video is not null
+//       {
+//         $match: {
+//           likedBy: userId,
+//           video: { $ne: null }
+//         }
+//       },
+//       // Lookup to join the 'video' collection
+//       {
+//         $lookup: {
+//           from: 'videos',
+//           localField: 'video',
+//           foreignField: '_id',
+//           as: 'video',
+//           pipeline: [
+//             {
+//               $project: {
+//                 _id: 0,
+//                 thumbnail: 1,
+//                 title: 1,
+//                 duration: 1,
+//                 views: 1,
+//                 createdAt: 1,
+//                 owner: 1,
+//               }
+//             },
+//             {
+//               $lookup: {
+//                 from: 'users',
+//                 localField: 'owner',
+//                 foreignField: '_id',
+//                 as: 'owner',
+//                 pipeline: [
+//                   {
+//                     $project: {
+//                       _id: 0,
+//                       username: 1,
+//                       fullName: 1,
+//                       avatar: 1,
+//                     }
+//                   }
+//                 ]
+//               }
+//             },
+//             {
+//               $unwind: {
+//                 path: '$owner',  // Ensure 'owner' is a single object
+//                 preserveNullAndEmptyArrays: true // In case the owner field is missing
+//               }
+//             }
+//           ]
+//         }
+//       },
+//       // Unwind the 'video' field so it can be accessed directly
+//       {
+//         $unwind: {
+//           path: '$video',
+//           preserveNullAndEmptyArrays: false  // Only include records where 'video' exists
+//         }
+//       },
+
+//     ]);
+
+//     return res
+//       .status(200)
+//       .json(
+//         new ApiResponse(200, likedVideos, "liked videos fetched successfully")
+//       )
+//   } catch (error) {
+//     throw new ApiError(500, error?.message || "Something went wrong while fetching videos");
+//   }
+// })
+
 export { toggleVideoLike, toggleCommentLike, toggleTweetLike, getLikedVideos };

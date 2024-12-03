@@ -148,6 +148,48 @@ const toggleCommentLike = asyncHandler(async (req, res) => {
 
 // Toggle like for a tweet
 const toggleTweetLike = asyncHandler(async (req, res) => {
+  const { tweetId } = req.params;
+  const userId = req.user.id;
+
+  if (!userId) {
+    throw new ApiError(400, "user id is required")
+  }
+  if (!isValidObjectId(userId)) {
+    throw new ApiError(400, "invalid user id")
+  }
+  if (!tweetId || !tweetId.trim()) {
+    throw new ApiError(400, "tweet id is required")
+  }
+  if (!isValidObjectId(tweetId)) {
+    throw new ApiError(400, "invalid tweet id")
+  }
+
+  // 1. Validate content existence (can be handled outside)
+  const tweet = await Tweet.findById(tweetId)
+  if (!tweet) {
+    throw new ApiError(404, `tweet not found.`);
+  }
+  // Start a session to ensure atomicity
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+
+  try {
+    const { like, dislike = false } = await toggleLike("tweet", tweetId, userId, session);
+
+    await session.commitTransaction();  // Commit the transaction after the like toggle
+
+    return res.status(200).json(
+      new ApiResponse(200, { like, dislike }, like ? "tweet liked." : "tweet unliked.")
+    );
+  } catch (error) {
+    // If an error occurs, abort the transaction
+    await session.abortTransaction();
+    throw new ApiError(error.statusCode ? error.statusCode : 500, error.message ? error.message : "Something went wrong while toggling tweet like.");
+  } finally {
+    // End the session whether it's committed or aborted
+    session.endSession();
+  }
 });
 
 // Get all liked videos by the current user

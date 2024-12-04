@@ -124,6 +124,35 @@ const toggleCommentDislike = asyncHandler(async (req, res) => {
 
 // Toggle dislike for a video
 const toggleTweetDislike = asyncHandler(async (req, res) => {
+    const { tweetId } = req.params;
+    const userId = req.user.id;
+
+    // 1. Validate content existence (can be handled outside)
+    const tweet = await Tweet.findById(tweetId)
+    if (!tweet) {
+        throw new ApiError(404, `tweet not found.`);
+    }
+    // Start a session to ensure atomicity
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+
+    try {
+        const { dislike, like = false } = await toggleDislike("tweet", tweetId, userId, session);
+
+        await session.commitTransaction();  // Commit the transaction after the like toggle
+
+        return res.status(200).json(
+            new ApiResponse(200, { like, dislike }, dislike ? "tweet disliked." : "tweet un-disliked.")
+        );
+    } catch (error) {
+        // If an error occurs, abort the transaction
+        await session.abortTransaction();
+        throw new ApiError(error.statusCode ? error.statusCode : 500, error.message ? error.message : "Something went wrong while toggling tweet dislike.");
+    } finally {
+        // End the session whether it's committed or aborted
+        session.endSession();
+    }
 });
 
 export { toggleVideoDislike, toggleCommentDislike, toggleTweetDislike };

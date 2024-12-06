@@ -49,6 +49,7 @@ const addVideComment = asyncHandler(async (req, res) => {
     }
 })
 
+//with aggregatePaginate (mongoose-aggregate-paginate-v2) 
 const getVideoComments = asyncHandler(async (req, res) => {
     const videoId = req.params.videoId?.trim();
     let { page = 1, limit = 10, sortBy = "createdAt", sortType = "asc" } = req.query
@@ -171,6 +172,38 @@ const getVideoComments = asyncHandler(async (req, res) => {
         throw new ApiError(500, error?.message || "An error accured while fetching comments");
     }
 })
+
+//without aggregatePaginate (mongoose-aggregate-paginate-v2)
+// const getvideoComments = asyncHandler(async (req, res) => {
+//     //TODO: get all comments for a video
+//     const { videoId } = req.params
+//     const { page = 1, limit = 10 } = req.query
+
+//     if (!mongoose.Types.ObjectId.isValid(videoId)) {
+//         throw new ApiError(400, "Invalid video ID");
+//     }
+
+//     const comments = await Comment.aggregate([
+//         { $match: { video: new mongoose.Types.ObjectId(videoId) } },
+//         { $sort: { createdAt: -1 } },
+//         {
+//             $facet: {
+//                 metadata: [{ $count: "total" }, { $addFields: { page: parseInt(page) } }],
+//                 data: [{ $skip: (page - 1) * limit }, { $limit: parseInt(limit) }],
+//             },
+//         },
+//         { $unwind: "$metadata" }
+//     ]);
+
+//     const response = {
+//         comments: comments.length > 0 ? comments[0].data : [],
+//         totalPages: comments.length > 0 ? Math.ceil(comments[0].metadata.total / limit) : 0,
+//         currentPage: parseInt(page)
+//     };
+
+//     res.status(200).json(new ApiResponse(200, response, "Comments retrieved successfully"));
+
+// })
 
 const addTweetComment = asyncHandler(async (req, res) => {
 })

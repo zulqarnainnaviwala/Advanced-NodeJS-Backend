@@ -206,9 +206,173 @@ const getVideoComments = asyncHandler(async (req, res) => {
 // })
 
 const addTweetComment = asyncHandler(async (req, res) => {
+    // TODO: add a comment to a tweet
+    const tweetId = req.params.tweetId?.trim();
+    const { content } = req.body;
+    const commentedBy = req.user._id
+
+    if (!tweetId) {
+        throw new ApiError(400, "Tweet ID is required");
+    }
+    if (!isValidObjectId(tweetId)) {
+        throw new ApiError(400, "Invalid Tweet ID");
+    }
+    if (!content || !content?.trim()) {
+        throw new ApiError(400, "Content is required");
+    }
+
+    // Check if the tweet exists
+    const tweet = await Tweet.findById(tweetId).lean(); //.lean() for faster read-only operations
+    if (!tweet) {
+        throw new ApiError(404, "Tweet not found");
+    }
+
+    try {
+        // Create the comment
+        const comment = await Comment.create({
+            content: content.trim(),
+            tweet: tweetId,
+            commentedBy,
+        });
+
+        if (!comment) {
+            throw new ApiError(500, "Failed to create the comment");
+        }
+
+        // Success response
+        return res
+            .status(200)
+            .json(
+                new ApiResponse(200, comment, "Comment added successfully")
+            );
+
+    } catch (error) {
+        throw new ApiError(500, error?.message || "An error occurred while adding the comment");
+    }
 })
 
 const getTweetComments = asyncHandler(async (req, res) => {
+
+    const tweetId = req.params.tweetId?.trim();
+    let { page = 1, limit = 10, sortBy = "createdAt", sortType = "asc" } = req.query
+
+    if (!tweetId) {
+        throw new ApiError(400, "Tweet ID is required");
+    }
+    if (!isValidObjectId(tweetId)) {
+        throw new ApiError(400, "Invalid Tweet ID");
+    }
+
+    // Sanitize and validate pagination and sorting inputs
+    page = Math.max(1, parseInt(page, 10) || 1); // Ensures page is at least 1
+    limit = Math.min(Math.max(1, parseInt(limit, 10) || 10), 50); // Ensures limit is between 1 and 50
+
+    const allowedSortFields = ["createdAt", "updatedAt"];
+    if (!allowedSortFields.includes(sortBy)) {
+        throw new ApiError(400, `Invalid sortBy field. Allowed fields: ${allowedSortFields.join(", ")}`);
+    }
+
+    const pipeline = [
+        // Match comments by tweet ID
+        {
+            $match: { tweet: new mongoose.Types.ObjectId(tweetId) }
+        },
+        // Sort comments by specified field
+        {
+            $sort: { [sortBy]: sortOrder }
+        },
+        // Populate commentedBy user details
+        {
+            $lookup: {
+                from: "users",
+                localField: "commentedBy",
+                foreignField: "_id",
+                as: "commentedBy",
+                pipeline: [
+                    {
+                        $project: {
+                            _id: 0,
+                            username: 1,
+                            fullName: 1,
+                            avatar: 1,
+                        },
+                    },
+                ],
+            },
+        },
+        { $unwind: { path: "$commentedBy", preserveNullAndEmptyArrays: false } },
+        // Fetch likes and dislikes
+        {
+            $lookup: {
+                from: "likes",
+                localField: "_id",
+                foreignField: "comment",
+                as: "likes",
+            },
+        },
+        {
+            $lookup: {
+                from: "dislikes",
+                localField: "_id",
+                foreignField: "comment",
+                as: "dislikes",
+            },
+        },
+        // Add fields for like/dislike counts and user-specific actions
+        {
+            $addFields: {
+                isLiked: {
+                    $cond: { if: { $in: [req.user?._id, "$likes.likedBy"] }, then: true, else: false },
+                },
+                likesCount: { $size: "$likes" },
+                isDisliked: {
+                    $cond: { if: { $in: [req.user?._id, "$dislikes.dislikedBy"] }, then: true, else: false },
+                },
+                dislikesCount: { $size: "$dislikes" },
+            },
+        },
+        // Select final fields
+        {
+            $project: {
+                _id: 1,
+                content: 1,
+                tweet: 1,
+                commentedBy: 1,
+                createdAt: 1,
+                likesCount: 1,
+                isLiked: 1,
+                dislikesCount: 1,
+                isDisliked: 1,
+            },
+        },
+    ];
+
+    try {
+        const result = await Comment.aggregatePaginate(pipeline, { page, limit });
+
+        if (!result.docs || result.docs.length === 0) {
+            return res
+                .status(200)
+                .json(
+                    new ApiResponse(200, [], "No comments found for this Tweet")
+                );
+        }
+
+        return res
+            .status(200)
+            .json(
+                new ApiResponse(200, {
+                    success: true,
+                    page: result.page,
+                    limit: result.limit,
+                    totalPages: result.totalPages,
+                    totalResults: result.totalDocs,
+                    comments: result.docs,
+                }, "Comments fetched successfully")
+            )
+    } catch (error) {
+        throw new ApiError(500, error?.message || "An error occurred while fetching Tweet comments");
+    }
 })
 
 const updateComment = asyncHandler(async (req, res) => {

@@ -422,7 +422,45 @@ const updateComment = asyncHandler(async (req, res) => {
 })
 
 const deleteComment = asyncHandler(async (req, res) => {
-})
+    const userId = req.user?._id;
+    const commentId = req.params.commentId?.trim(); // Precise and reusable
+
+    // Input validation
+    if (!commentId) {
+        throw new ApiError(400, "Comment ID is required");
+    }
+    if (!isValidObjectId(commentId)) {
+        throw new ApiError(400, "Invalid Comment ID");
+    }
+
+    try {
+        // Find the comment
+        const comment = await Comment.findById(commentId);
+        if (!comment) {
+            throw new ApiError(404, "Comment not found");
+        }
+
+        // Verify ownership
+        if (!comment.commentedBy.equals(userId)) {
+            throw new ApiError(403, "Unauthorized to delete this comment");
+        }
+
+        // Delete the comment and return the deleted document
+        const deletedComment = await Comment.findByIdAndDelete(commentId);
+
+        if (!deletedComment) {
+            throw new ApiError(500, "Failed to delete the comment");
+        }
+
+        return res
+            .status(200)
+            .json(
+                new ApiResponse(200, deletedComment, "Comment deleted successfully")
+            );
+    } catch (error) {
+        throw new ApiError(500, error?.message || "An error occurred while deleting the comment");
+    }
+});
 
 export {
     addVideComment,

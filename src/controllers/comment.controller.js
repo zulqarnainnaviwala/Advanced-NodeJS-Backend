@@ -376,6 +376,49 @@ const getTweetComments = asyncHandler(async (req, res) => {
 })
 
 const updateComment = asyncHandler(async (req, res) => {
+    const commentId = req.params.commentId?.trim();
+    const { content } = req.body;
+
+    if (!commentId) {
+        throw new ApiError(400, "Comment ID is required");
+    }
+    if (!isValidObjectId(commentId)) {
+        throw new ApiError(400, "Invalid Comment ID");
+    }
+    if (!content || !content?.trim()) {
+        throw new ApiError(400, "New tweet content is required to update");
+    }
+
+    try {
+        const comment = await Comment.findById(commentId);
+        if (!comment) {
+            throw new ApiError(404, "Comment not found.");
+        }
+
+        // Check ownership
+        if (!comment.commentedBy.equals(req.user?._id)) {
+            throw new ApiError(403, "You are not authorized to update this tweet.");
+        }
+
+        // Update the tweet
+        const updatedComment = await Comment.findByIdAndUpdate(
+            commentId,
+            { $set: { content: content.trim() || comment.content } },
+            { new: true, runValidators: true }
+        );
+
+        if (!updatedComment) {
+            throw new ApiError(500, "Failed to update the comment. Please try again later.");
+        }
+
+        return res
+            .status(200)
+            .json(
+                new ApiResponse(200, updatedComment, "Comment updated successfully")
+            );
+    } catch (error) {
+        throw new ApiError(500, error?.message || "An error occurred while updating the comment")
+    }
 })
 
 const deleteComment = asyncHandler(async (req, res) => {
